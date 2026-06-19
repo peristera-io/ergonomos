@@ -29,7 +29,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
+  /auth/register:
+    post:
+      summary: Register a new account
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '201':
+          description: Account created; an authentication token is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: An account already exists for this email.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /auth/sessions:
+    post:
+      summary: Sign in with email and password
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '200':
+          description: Credentials accepted; an authentication token is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: Authentication failed (unknown email or wrong password).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
+  responses:
+    Problem:
+      description: Request could not be processed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
   schemas:
     Health:
       type: object
@@ -38,6 +95,47 @@ components:
         status:
           type: string
           example: ok
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: ada@example.org
+        password:
+          type: string
+          format: password
+          minLength: 8
+    Actor:
+      description: A principal that can hold relationships to objects (ADR-0004).
+      type: object
+      required: [id, handle, instance, local]
+      properties:
+        id:
+          type: string
+          description: Opaque, globally-unique identifier (ULID).
+          example: 01J9Z3K7QF8XN2M4R5T6V7W8Y9
+        handle:
+          type: string
+          description: Local part on this instance; "ada" for ada@example.org.
+          example: ada
+        instance:
+          type: string
+          description: Home-instance domain.
+          example: localhost
+        local:
+          type: boolean
+          example: true
+    Session:
+      type: object
+      required: [token, actor]
+      properties:
+        token:
+          type: string
+          description: Opaque bearer token for the authenticated actor.
+        actor:
+          $ref: '#/components/schemas/Actor'
     Problem:
       description: RFC 9457 problem detail
       type: object

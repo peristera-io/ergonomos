@@ -1,14 +1,18 @@
 // Command ergonomos is the ergonomos backend server.
 //
-// At this stage it serves only a liveness probe; feature slices are added
-// red→green from the specs in server/features. See CLAUDE.md.
+// Feature slices are added red→green from the specs in server/features. See
+// CLAUDE.md. The HTTP surface lives in internal/rest; this command only wires
+// the adapters together and listens.
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/peristera-io/ergonomos/server/internal/auth"
+	"github.com/peristera-io/ergonomos/server/internal/domain"
+	"github.com/peristera-io/ergonomos/server/internal/rest"
 )
 
 func main() {
@@ -26,13 +30,18 @@ func port() string {
 	return "8080"
 }
 
-// routes builds the HTTP handler. Kept separate from main so tests can
-// exercise it without binding a socket.
+func instanceDomain() string {
+	if d := os.Getenv("ERGONOMOS_DOMAIN"); d != "" {
+		return d
+	}
+	return "localhost"
+}
+
+// routes wires the in-memory adapters and the HTTP delivery layer. Postgres
+// and embedded-OpenFGA adapters replace the in-memory ones in later slices,
+// behind the same ports.
 func routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-	return mux
+	instance := domain.Instance{ID: domain.NewID(), Domain: instanceDomain()}
+	authsvc := auth.NewService(auth.NewMemoryStore(), instance)
+	return rest.New(authsvc)
 }

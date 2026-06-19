@@ -6,6 +6,52 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — First feature slice: registration & sign-in (red→green)
+
+Wired `auth.feature` to godog and implemented the four scenarios end to end
+through the real HTTP surface. This is the first slice with behavior, the first
+dependency, and the first proof of the BDD loop.
+
+- **Spec first (ADR-0001):** added `POST /auth/register` and
+  `POST /auth/sessions` to `api/openapi.yaml`, with `Credentials`, `Actor`, and
+  `Session` schemas and RFC 9457 problem responses (201/409 for register,
+  200/401 for sign-in).
+- **Hexagonal core (ADR-0006):** new `internal/auth` holds the `Service` plus a
+  `Store` port; `internal/rest` is the HTTP adapter. `cmd/ergonomos` wires them.
+- **In-memory first, deliberately.** The auth `Store` uses an in-memory adapter;
+  Postgres and embedded-OpenFGA are *not* pulled in yet — they implement the
+  same ports in a later slice. Cheap and reversible because it's behind a port.
+  (Revises the earlier "auth slice pulls in Postgres" note; it doesn't have to.)
+- **Passwords** are salted PBKDF2-SHA256 via the stdlib `crypto/pbkdf2` (Go 1.24+),
+  encoded self-describingly (`pbkdf2-sha256$iter$salt$hash`); verify is
+  constant-time.
+- **Actor IDs are ULIDs** via `domain.NewID`, using `oklog/ulid` with a
+  monotonic entropy source seeded from `crypto/rand` (guarded by a mutex — the
+  monotonic reader isn't concurrency-safe). Chose ULID over hand-rolled UUIDv4
+  for time-ordered sortability (DB index locality) and to use a tested library;
+  this is the concrete pick within ADR-0004's "ULID/UUID".
+- **Dependencies:** `github.com/cucumber/godog` (v0.15.1, **test-only**) and
+  `github.com/oklog/ulid/v2` (v2.1.1, **runtime** — first runtime dep, taken
+  deliberately for IDs). Ran `go mod tidy`; `go.sum` now exists.
+- **Acceptance:** 4 scenarios / 17 steps green; each scenario runs a fresh
+  instance via `httptest` against `rest.New`. CI updated to cache on
+  `server/go.sum` (the "enable caching once deps land" TODO is done).
+
+**Deferred (not blocking, documented so it isn't lost):**
+- No event emitted on registration yet (ADR-0003 outbox); wire it with the
+  first shareable-resource slice where authz tuples also start mattering.
+- Tokens are opaque and minted but not persisted/validated — there are no
+  protected routes yet. Session storage + auth middleware come with the first
+  authenticated endpoint; OAuth2 / scoped tokens (ADR-0006) layer on later.
+- **Router:** evaluated chi vs. stdlib `ServeMux`. Go 1.22+ `ServeMux` already
+  does method + path-param routing, so chi adds no routing value yet; its real
+  edge is middleware composition / route groups. Decision: stay on `ServeMux`
+  and adopt chi *in the slice that introduces the first middleware* (token
+  auth, logging, recovery, CORS). The router sits behind `rest.New`, so the
+  switch is localized — record it then (worklog/ADR).
+
+---
+
 ## 2026-06-19 — Finalize org/repo and publish to GitHub
 
 Repository published at **github.com/peristera-io/ergonomos** (public).

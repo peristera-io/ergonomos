@@ -6,10 +6,33 @@
 // precluded.
 package domain
 
-// ID is an opaque, globally-unique identifier (ULID/UUID in canonical string
-// form). We never expose sequential integer keys across the API boundary.
-// Generation is wired in a later slice.
+import (
+	"crypto/rand"
+	"sync"
+
+	"github.com/oklog/ulid/v2"
+)
+
+// ID is an opaque, globally-unique identifier in canonical ULID string form
+// (Crockford base32, 26 chars). ULIDs are lexicographically sortable by
+// creation time, which keeps database index locality good without exposing a
+// sequential integer key (ADR-0004).
 type ID string
+
+// entropy is a monotonic ULID entropy source seeded from crypto/rand. The
+// monotonic reader is not safe for concurrent use, so NewID guards it.
+var (
+	entropyMu sync.Mutex
+	entropy   = ulid.Monotonic(rand.Reader, 0)
+)
+
+// NewID returns a fresh ULID. Within the same millisecond, successive IDs are
+// strictly increasing; across milliseconds they sort by time.
+func NewID() ID {
+	entropyMu.Lock()
+	defer entropyMu.Unlock()
+	return ID(ulid.MustNew(ulid.Now(), entropy).String())
+}
 
 // Instance identifies an ergonomos server ("home instance") in a federation.
 type Instance struct {

@@ -38,6 +38,7 @@ type Task struct {
 	ID        domain.ID
 	Title     string
 	Owner     domain.ID
+	Done      bool
 	CreatedAt time.Time // UTC
 }
 
@@ -47,6 +48,8 @@ type Store interface {
 	Create(ctx context.Context, t Task) error
 	// Get returns the task with id, or ErrNotFound if none exists.
 	Get(ctx context.Context, id domain.ID) (Task, error)
+	// Update replaces the stored task with t, or ErrNotFound if it is absent.
+	Update(ctx context.Context, t Task) error
 	// ListByOwner returns the tasks owned by owner, in any order.
 	ListByOwner(ctx context.Context, owner domain.ID) ([]Task, error)
 }
@@ -88,10 +91,56 @@ func (s *Service) Create(ctx context.Context, owner domain.Actor, title string) 
 	return t, nil
 }
 
-// Get returns the task with id if actor owns it, else ErrNotFound. The
-// authorization check runs first, so a caller cannot distinguish "no such task"
-// from "someone else's task".
+// Get returns the task with id if actor owns it, else ErrNotFound.
 func (s *Service) Get(ctx context.Context, actor domain.Actor, id domain.ID) (Task, error) {
+	return s.owned(ctx, actor, id)
+}
+
+// UpdateTitle changes the title of actor's task and appends a task.updated
+// event. A non-owner (or unknown id) gets ErrNotFound; an empty title is
+// rejected only after ownership is confirmed, so a non-owner cannot tell an
+// invalid title from a missing task.
+func (s *Service) UpdateTitle(ctx context.Context, actor domain.Actor, id domain.ID, title string) (Task, error) {
+	t, err := s.owned(ctx, actor, id)
+	if err != nil {
+		return Task{}, err
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return Task{}, ErrEmptyTitle
+	}
+	t.Title = title
+	if err := s.store.Update(ctx, t); err != nil {
+		return Task{}, err
+	}
+	if err := s.outbox.Append(ctx, changedEvent("task.updated", t)); err != nil {
+		return Task{}, err
+	}
+	return t, nil
+}
+
+// Complete marks actor's task done and appends a task.completed event. It is
+// idempotent: completing an already-done task leaves it done. A non-owner (or
+// unknown id) gets ErrNotFound.
+func (s *Service) Complete(ctx context.Context, actor domain.Actor, id domain.ID) (Task, error) {
+	t, err := s.owned(ctx, actor, id)
+	if err != nil {
+		return Task{}, err
+	}
+	t.Done = true
+	if err := s.store.Update(ctx, t); err != nil {
+		return Task{}, err
+	}
+	if err := s.outbox.Append(ctx, changedEvent("task.completed", t)); err != nil {
+		return Task{}, err
+	}
+	return t, nil
+}
+
+// owned returns actor's task, or ErrNotFound. The authorization check runs
+// before the store read, so a caller cannot distinguish "no such task" from
+// "someone else's task".
+func (s *Service) owned(ctx context.Context, actor domain.Actor, id domain.ID) (Task, error) {
 	ok, err := s.authz.Check(ctx, ownerTuple(actor.ID, id))
 	if err != nil {
 		return Task{}, err
@@ -122,16 +171,29 @@ func ownerTuple(owner, taskID domain.ID) authz.Tuple {
 }
 
 func createdEvent(t Task) events.Event {
+	e := taskEvent("task.created", t)
+	e.OccurredAt = t.CreatedAt
+	return e
+}
+
+// changedEvent records a mutation that happened now (update, completion).
+func changedEvent(eventType string, t Task) events.Event {
+	e := taskEvent(eventType, t)
+	e.OccurredAt = time.Now().UTC()
+	return e
+}
+
+func taskEvent(eventType string, t Task) events.Event {
 	payload, _ := json.Marshal(struct {
 		ID    domain.ID `json:"id"`
 		Title string    `json:"title"`
 		Owner domain.ID `json:"owner"`
-	}{ID: t.ID, Title: t.Title, Owner: t.Owner})
+		Done  bool      `json:"done"`
+	}{ID: t.ID, Title: t.Title, Owner: t.Owner, Done: t.Done})
 	return events.Event{
-		ID:         string(domain.NewID()),
-		Type:       "task.created",
-		Subject:    "task:" + string(t.ID),
-		OccurredAt: t.CreatedAt,
-		Payload:    payload,
+		ID:      string(domain.NewID()),
+		Type:    eventType,
+		Subject: "task:" + string(t.ID),
+		Payload: payload,
 	}
 }

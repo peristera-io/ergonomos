@@ -23,6 +23,11 @@ func registerTaskSteps(ctx *godog.ScenarioContext, w *world) {
 	ctx.Step(`^I request a task with an unknown ID$`, w.requestUnknownTask)
 	ctx.Step(`^that user requests my task by its ID$`, w.thatUserRequestsMyTask)
 	ctx.Step(`^I request my tasks$`, w.requestMyTasks)
+	ctx.Step(`^I change that task's title to "([^"]*)"$`, w.changeTaskTitle)
+	ctx.Step(`^I change that task's title to "([^"]*)" without a token$`, w.changeTaskTitleNoToken)
+	ctx.Step(`^that user changes my task's title to "([^"]*)"$`, w.otherChangesTaskTitle)
+	ctx.Step(`^I complete that task$`, w.completeTask)
+	ctx.Step(`^that user completes my task$`, w.otherCompletesTask)
 
 	ctx.Step(`^the task is created$`, w.taskIsCreated)
 	ctx.Step(`^the task has an opaque, globally-unique identifier$`, w.taskHasOpaqueID)
@@ -33,6 +38,8 @@ func registerTaskSteps(ctx *godog.ScenarioContext, w *world) {
 	ctx.Step(`^the task is not found$`, w.taskNotFound)
 	ctx.Step(`^I receive a list containing both tasks$`, w.listContainsBothTasks)
 	ctx.Step(`^I receive a list containing only my task "([^"]*)"$`, w.listContainsOnlyMyTask)
+	ctx.Step(`^the task is marked done$`, w.taskIsMarkedDone)
+	ctx.Step(`^the task is not marked done$`, w.taskIsNotMarkedDone)
 }
 
 // postTask creates a task through the API using the given bearer token (empty
@@ -47,6 +54,44 @@ func (w *world) postTask(token, title string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return w.record(resp)
+}
+
+// patchTask updates a task's title through the API using the given bearer
+// token (empty for an unauthenticated request) and records the response.
+func (w *world) patchTask(token, id, title string) error {
+	payload, err := json.Marshal(map[string]string{"title": title})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPatch, w.server.URL+"/tasks/"+id, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return w.record(resp)
+}
+
+// completeTaskAs marks a task done through the API using the given bearer token.
+func (w *world) completeTaskAs(token, id string) error {
+	req, err := http.NewRequest(http.MethodPost, w.server.URL+"/tasks/"+id+"/complete", nil)
+	if err != nil {
+		return err
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -134,6 +179,20 @@ func (w *world) thatUserRequestsMyTask() error { return w.get("/tasks/"+w.taskID
 
 func (w *world) requestMyTasks() error { return w.get("/tasks", w.token) }
 
+func (w *world) changeTaskTitle(title string) error { return w.patchTask(w.token, w.taskID, title) }
+
+func (w *world) changeTaskTitleNoToken(title string) error {
+	return w.patchTask("", w.taskID, title)
+}
+
+func (w *world) otherChangesTaskTitle(title string) error {
+	return w.patchTask(w.otherToken, w.taskID, title)
+}
+
+func (w *world) completeTask() error { return w.completeTaskAs(w.token, w.taskID) }
+
+func (w *world) otherCompletesTask() error { return w.completeTaskAs(w.otherToken, w.taskID) }
+
 func (w *world) taskIsCreated() error {
 	return w.statusShouldBe(http.StatusCreated, "task creation")
 }
@@ -172,6 +231,20 @@ func (w *world) taskTitleIs(want string) error {
 
 func (w *world) taskNotFound() error {
 	return w.statusShouldBe(http.StatusNotFound, "task retrieval")
+}
+
+func (w *world) taskIsMarkedDone() error {
+	if done, _ := w.body["done"].(bool); !done {
+		return fmt.Errorf("task done = %v, want true", w.body["done"])
+	}
+	return nil
+}
+
+func (w *world) taskIsNotMarkedDone() error {
+	if done, _ := w.body["done"].(bool); done {
+		return fmt.Errorf("task done = %v, want false", w.body["done"])
+	}
+	return nil
 }
 
 func (w *world) listTitles() ([]string, error) {

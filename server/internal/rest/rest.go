@@ -36,6 +36,8 @@ func New(authsvc *auth.Service, tasksvc *task.Service) http.Handler {
 		r.Post("/tasks", handleCreateTask(tasksvc))
 		r.Get("/tasks", handleListTasks(tasksvc))
 		r.Get("/tasks/{id}", handleGetTask(tasksvc))
+		r.Patch("/tasks/{id}", handleUpdateTask(tasksvc))
+		r.Post("/tasks/{id}/complete", handleCompleteTask(tasksvc))
 	})
 
 	return r
@@ -67,6 +69,7 @@ type taskView struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	Owner     string `json:"owner"`
+	Done      bool   `json:"done"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -173,6 +176,49 @@ func handleGetTask(svc *task.Service) http.HandlerFunc {
 	}
 }
 
+func handleUpdateTask(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Title string `json:"title"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			writeProblem(w, http.StatusBadRequest, "Invalid request body", "Expected a JSON object with a title.")
+			return
+		}
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		id := domain.ID(chi.URLParam(r, "id"))
+		t, err := svc.UpdateTitle(r.Context(), actor, id, in.Title)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, toTaskView(t))
+		case errors.Is(err, task.ErrEmptyTitle):
+			writeProblem(w, http.StatusBadRequest, "Invalid task", "A task title must not be empty.")
+		case errors.Is(err, task.ErrNotFound):
+			writeProblem(w, http.StatusNotFound, "Task not found", "No such task is visible to you.")
+		default:
+			writeProblem(w, http.StatusInternalServerError, "Could not update task", "")
+		}
+	}
+}
+
+func handleCompleteTask(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		id := domain.ID(chi.URLParam(r, "id"))
+		t, err := svc.Complete(r.Context(), actor, id)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, toTaskView(t))
+		case errors.Is(err, task.ErrNotFound):
+			writeProblem(w, http.StatusNotFound, "Task not found", "No such task is visible to you.")
+		default:
+			writeProblem(w, http.StatusInternalServerError, "Could not complete task", "")
+		}
+	}
+}
+
 // requireAuth is middleware that resolves the bearer token to an actor and
 // stashes it in the request context, or replies 401.
 func requireAuth(svc *auth.Service) func(http.Handler) http.Handler {
@@ -237,6 +283,7 @@ func toTaskView(t task.Task) taskView {
 		ID:        string(t.ID),
 		Title:     t.Title,
 		Owner:     string(t.Owner),
+		Done:      t.Done,
 		CreatedAt: t.CreatedAt.Format(time.RFC3339Nano),
 	}
 }

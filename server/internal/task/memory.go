@@ -36,6 +36,16 @@ func (m *MemoryStore) Get(_ context.Context, id domain.ID) (Task, error) {
 	return t, nil
 }
 
+func (m *MemoryStore) Update(_ context.Context, t Task) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.byID[t.ID]; !ok {
+		return ErrNotFound
+	}
+	m.byID[t.ID] = t
+	return nil
+}
+
 func (m *MemoryStore) ListByOwner(_ context.Context, owner domain.ID) ([]Task, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

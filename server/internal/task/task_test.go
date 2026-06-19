@@ -82,6 +82,68 @@ func TestGetUnknownIDIsNotFound(t *testing.T) {
 	}
 }
 
+func TestUpdateTitle(t *testing.T) {
+	f := newFixture()
+	ada, grace := newActor(), newActor()
+	created, _ := f.svc.Create(context.Background(), ada, "Draft")
+
+	updated, err := f.svc.UpdateTitle(context.Background(), ada, created.ID, "  Final draft  ")
+	if err != nil {
+		t.Fatalf("UpdateTitle: %v", err)
+	}
+	if updated.Title != "Final draft" {
+		t.Fatalf("title = %q, want %q", updated.Title, "Final draft")
+	}
+
+	if _, err := f.svc.UpdateTitle(context.Background(), ada, created.ID, "   "); err != ErrEmptyTitle {
+		t.Fatalf("empty title error = %v, want ErrEmptyTitle", err)
+	}
+	if _, err := f.svc.UpdateTitle(context.Background(), grace, created.ID, "Hijacked"); err != ErrNotFound {
+		t.Fatalf("non-owner update error = %v, want ErrNotFound", err)
+	}
+
+	got, _ := f.svc.Get(context.Background(), ada, created.ID)
+	if got.Title != "Final draft" {
+		t.Fatalf("persisted title = %q, want unchanged %q", got.Title, "Final draft")
+	}
+	if !hasEventType(f.outbox, "task.updated") {
+		t.Fatalf("expected a task.updated event, got %+v", f.outbox.Events())
+	}
+}
+
+func TestComplete(t *testing.T) {
+	f := newFixture()
+	ada, grace := newActor(), newActor()
+	created, _ := f.svc.Create(context.Background(), ada, "Write acceptance tests")
+	if created.Done {
+		t.Fatal("new task should not be done")
+	}
+
+	done, err := f.svc.Complete(context.Background(), ada, created.ID)
+	if err != nil || !done.Done {
+		t.Fatalf("Complete: task=%+v err=%v", done, err)
+	}
+	// Idempotent.
+	if again, err := f.svc.Complete(context.Background(), ada, created.ID); err != nil || !again.Done {
+		t.Fatalf("second Complete: task=%+v err=%v", again, err)
+	}
+	if _, err := f.svc.Complete(context.Background(), grace, created.ID); err != ErrNotFound {
+		t.Fatalf("non-owner complete error = %v, want ErrNotFound", err)
+	}
+	if !hasEventType(f.outbox, "task.completed") {
+		t.Fatalf("expected a task.completed event, got %+v", f.outbox.Events())
+	}
+}
+
+func hasEventType(o *events.MemoryOutbox, typ string) bool {
+	for _, e := range o.Events() {
+		if e.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
 func TestListReturnsOnlyOwnedTasksSorted(t *testing.T) {
 	f := newFixture()
 	ada, grace := newActor(), newActor()

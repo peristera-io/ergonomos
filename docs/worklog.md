@@ -6,6 +6,34 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Fourth slice: task update & completion
+
+Extended the task aggregate from create/read/list to also support editing the
+title and marking a task done — the first task *mutations*, and the first
+events beyond `task.created`.
+
+- **Spec first (ADR-0001):** added six scenarios to `task.feature` — update
+  title (success; empty title → 400; another user → 404; unauthenticated →
+  401) and completion (success; another user → 404) — plus an assertion that a
+  freshly created task is not done. `api/openapi.yaml` gains `PATCH /tasks/{id}`
+  and `POST /tasks/{id}/complete`, and a `done` boolean on the `Task` schema.
+- **`task.Service`:** `Task` gains `Done bool`; the `Store` port gains
+  `Update`. New `UpdateTitle` and `Complete` methods both go through a shared
+  `owned` helper that runs `authz.Check` **before** the store read, so a
+  non-owner cannot distinguish an invalid title or a completed task from a
+  missing one — every cross-user path is a uniform 404. `Complete` is
+  idempotent. Each mutation appends a `task.updated` / `task.completed` event.
+- **REST:** `PATCH` and `POST .../complete` handlers in the existing
+  `requireAuth` group; `taskView` carries `done`.
+- **Acceptance:** 22 scenarios / 111 steps green (16 prior + 6 new). Unit tests
+  added for update (incl. empty-title and non-owner) and completion (incl.
+  idempotency, non-owner, and the emitted events).
+
+**Deferred (unchanged):** still no delete; authz remains exact-tuple match
+(owner only) pending embedded OpenFGA; nothing consumes the outbox yet.
+
+---
+
 ## 2026-06-19 — Third slice: task management + first authz/outbox use
 
 The first slice with a domain aggregate. Tasks can be created, retrieved, and

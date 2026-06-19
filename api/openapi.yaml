@@ -146,18 +146,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
   /tasks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Opaque task identifier.
     get:
       summary: Retrieve one of the authenticated actor's tasks
       operationId: getTask
       security:
         - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Opaque task identifier.
       responses:
         '200':
           description: The requested task.
@@ -176,6 +176,71 @@ paths:
             No such task is visible to the caller. Unknown id and a task owned
             by someone else both return 404 so the API cannot be used to probe
             for others' tasks.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    patch:
+      summary: Update one of the authenticated actor's tasks
+      operationId: updateTask
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '200':
+          description: The updated task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such task is visible to the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tasks/{id}/complete:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Opaque task identifier.
+    post:
+      summary: Mark one of the authenticated actor's tasks as done
+      operationId: completeTask
+      description: Idempotent; completing an already-completed task is a no-op.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The completed task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such task is visible to the caller.
           content:
             application/problem+json:
               schema:
@@ -253,7 +318,7 @@ components:
     Task:
       description: A unit of work owned by an actor (ADR-0006, first-class aggregate).
       type: object
-      required: [id, title, owner, createdAt]
+      required: [id, title, owner, done, createdAt]
       properties:
         id:
           type: string
@@ -266,6 +331,10 @@ components:
           type: string
           description: Opaque id of the owning actor.
           example: 01J9Z3K7QF8XN2M4R5T6V7W8Y9
+        done:
+          type: boolean
+          description: Whether the task has been completed.
+          example: false
         createdAt:
           type: string
           format: date-time

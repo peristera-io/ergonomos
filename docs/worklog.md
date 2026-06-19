@@ -6,6 +6,17 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Finalize org/repo and publish to GitHub
+
+Repository published at **github.com/peristera-io/ergonomos** (public).
+
+- Renamed the Go module to `github.com/peristera-io/ergonomos/server`.
+- Filled the `cla.yml` placeholders: real `CLA.md` URL and added `jlspielmann`
+  to the allowlist. (Action version still pinned to v2.3.0 — bump when handy.)
+- Removed the module-path "placeholder" note from `README.md`.
+
+---
+
 ## 2026-06-19 — Decide engine integration model (embeddable over the network)
 
 Confirmed ergonomos can serve as an embeddable todo engine for two scenarios —

@@ -4,10 +4,8 @@ name: CLA
 # Signatures are stored in this repo at signatures/cla.json, committed by the
 # built-in GITHUB_TOKEN (hence contents: write). No external service needed.
 #
-# PUBLISH-TIME TODO:
-#   * set `path-to-document` to the real CLA.md URL (OWNER/REPO below)
-#   * add the repo owner to `allowlist` so their own PRs aren't gated
-#   * pin `uses:` to the latest release (check the action's releases page)
+# NOTE: `uses:` is pinned to a specific release; bump it to the latest from the
+# action's releases page when convenient.
 
 on:
   issue_comment:
@@ -34,8 +32,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: 'signatures/cla.json'
-          path-to-document: 'https://github.com/OWNER/REPO/blob/main/CLA.md'
+          path-to-document: 'https://github.com/peristera-io/ergonomos/blob/main/CLA.md'
           branch: 'main'
-          allowlist: 'dependabot[bot]'
+          allowlist: 'jlspielmann,dependabot[bot]'
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
           custom-notsigned-prcomment: 'Thank you for your contribution! Before we can merge it, please read our CLA (CLA.md) and sign it by posting the comment below. You only need to do this once.'

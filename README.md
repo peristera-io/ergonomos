@@ -59,10 +59,6 @@ Early scaffolding. The first feature slice (user registration & authentication)
 is specified in `server/features/auth.feature` and is the next thing to be
 implemented red→green.
 
-> **Note:** the Go module path (`github.com/ergonomos/ergonomos/server`) is a
-> placeholder until the GitHub org/repo is finalized — update it with
-> `go mod edit -module=...` and adjust imports.
-
 ## License
 
 AGPL-3.0-or-later (`LICENSE`) with the App Store distribution exception

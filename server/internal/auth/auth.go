@@ -1,17 +1,14 @@
-// Package auth is the authentication boundary: registration and sign-in for
-// local accounts. It depends only on the Store port (ADR-0006 hexagonal core);
-// the v1 adapter is in-memory, with a Postgres adapter to follow behind the
-// same interface.
+// Package auth is the authentication boundary: registration, sign-in, and
+// resolving a bearer token back to its actor. It depends only on ports (the
+// Store and Sessions interfaces, ADR-0006 hexagonal core); the v1 adapters are
+// in-memory, with Postgres adapters to follow behind the same interfaces.
 //
-// Token persistence and validation (and third-party / OAuth2 authorization,
-// ADR-0006) are deliberately out of this first slice: tokens are opaque and
-// minted here, but there are no protected routes consuming them yet.
+// Third-party / OAuth2 authorization (ADR-0006) is still out of scope: tokens
+// here are opaque session tokens for the interactive user.
 package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -27,6 +24,8 @@ var (
 	ErrWeakPassword       = errors.New("auth: password too short")
 	// ErrNotFound is returned by a Store when no user matches.
 	ErrNotFound = errors.New("auth: user not found")
+	// ErrInvalidToken is returned by Sessions.Resolve for an unknown token.
+	ErrInvalidToken = errors.New("auth: invalid token")
 )
 
 // MinPasswordLen is the shortest password we accept at registration.
@@ -47,16 +46,25 @@ type Store interface {
 	FindByEmail(ctx context.Context, email string) (User, error)
 }
 
-// Service performs registration and authentication against a Store.
+// Sessions issues opaque bearer tokens and resolves them back to an actor.
+type Sessions interface {
+	// Issue mints a fresh token bound to actor.
+	Issue(ctx context.Context, actor domain.Actor) (string, error)
+	// Resolve returns the actor a token was issued for, or ErrInvalidToken.
+	Resolve(ctx context.Context, token string) (domain.Actor, error)
+}
+
+// Service performs registration, authentication, and token resolution.
 type Service struct {
 	store    Store
+	sessions Sessions
 	instance domain.Instance
 }
 
 // NewService builds a Service. instance is the home instance new local actors
 // are minted on.
-func NewService(store Store, instance domain.Instance) *Service {
-	return &Service{store: store, instance: instance}
+func NewService(store Store, sessions Sessions, instance domain.Instance) *Service {
+	return &Service{store: store, sessions: sessions, instance: instance}
 }
 
 // Register creates a new local account and returns the actor with a fresh
@@ -79,7 +87,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (domain.
 	if err := s.store.CreateUser(ctx, User{Actor: actor, Email: email, PasswordHash: hash}); err != nil {
 		return domain.Actor{}, "", err
 	}
-	token, err := newToken()
+	token, err := s.sessions.Issue(ctx, actor)
 	if err != nil {
 		return domain.Actor{}, "", err
 	}
@@ -99,11 +107,17 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (dom
 	if !verifyPassword(u.PasswordHash, password) {
 		return domain.Actor{}, "", ErrInvalidCredentials
 	}
-	token, err := newToken()
+	token, err := s.sessions.Issue(ctx, u.Actor)
 	if err != nil {
 		return domain.Actor{}, "", err
 	}
 	return u.Actor, token, nil
+}
+
+// ActorFromToken resolves a bearer token to its actor, returning
+// ErrInvalidToken if the token is unknown.
+func (s *Service) ActorFromToken(ctx context.Context, token string) (domain.Actor, error) {
+	return s.sessions.Resolve(ctx, token)
 }
 
 func normalizeEmail(email string) string {
@@ -117,13 +131,4 @@ func handleFromEmail(email string) string {
 		return email[:i]
 	}
 	return email
-}
-
-// newToken mints an opaque 256-bit bearer token.
-func newToken() (string, error) {
-	var b [32]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }

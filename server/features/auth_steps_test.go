@@ -20,17 +20,18 @@ import (
 // correct password". Sign-in with anything else is treated as incorrect.
 const validPassword = "correct horse battery staple"
 
-// world holds the per-scenario state: the running instance and the last
-// response observed through the API.
+// world holds the per-scenario state: the running instance, the most recent
+// token observed, and the last response seen through the API.
 type world struct {
 	server *httptest.Server
 	status int
 	body   map[string]any
+	token  string
 }
 
 func (w *world) aRunningInstance() error {
 	instance := domain.Instance{ID: domain.NewID(), Domain: "localhost"}
-	svc := auth.NewService(auth.NewMemoryStore(), instance)
+	svc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
 	w.server = httptest.NewServer(rest.New(svc))
 	return nil
 }
@@ -44,8 +45,28 @@ func (w *world) post(path, email, password string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	return w.record(resp)
+}
 
+func (w *world) get(path, token string) error {
+	req, err := http.NewRequest(http.MethodGet, w.server.URL+path, nil)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return w.record(resp)
+}
+
+// record captures the status and decoded body of resp, remembering any token
+// it carries for later authenticated requests.
+func (w *world) record(resp *http.Response) error {
+	defer resp.Body.Close()
 	w.status = resp.StatusCode
 	w.body = nil
 	data, err := io.ReadAll(resp.Body)
@@ -56,6 +77,9 @@ func (w *world) post(path, email, password string) error {
 		if err := json.Unmarshal(data, &w.body); err != nil {
 			return fmt.Errorf("decoding response body %q: %w", data, err)
 		}
+	}
+	if t, ok := w.body["token"].(string); ok {
+		w.token = t
 	}
 	return nil
 }
@@ -109,13 +133,42 @@ func (w *world) receiveToken() error {
 	return nil
 }
 
+// actorHandleIs reads the handle from the last response, accepting either a
+// Session ({actor:{...}}, from register/sign-in) or a bare Actor (from /me).
 func (w *world) actorHandleIs(want string) error {
-	actor, _ := w.body["actor"].(map[string]any)
+	actor := w.body
+	if nested, ok := w.body["actor"].(map[string]any); ok {
+		actor = nested
+	}
 	got, _ := actor["handle"].(string)
 	if got != want {
 		return fmt.Errorf("actor handle = %q, want %q", got, want)
 	}
 	return nil
+}
+
+func (w *world) iHaveRegisteredAs(email string) error {
+	if err := w.registerWithValidPassword(email); err != nil {
+		return err
+	}
+	if w.status != http.StatusCreated {
+		return fmt.Errorf("setup: registering %q returned status %d", email, w.status)
+	}
+	return nil
+}
+
+func (w *world) requestProfileWithMyToken() error { return w.get("/me", w.token) }
+
+func (w *world) requestProfileWithoutToken() error { return w.get("/me", "") }
+
+func (w *world) requestProfileWithToken(token string) error { return w.get("/me", token) }
+
+func (w *world) profileReturned() error {
+	return w.statusShouldBe(http.StatusOK, "profile lookup")
+}
+
+func (w *world) requestUnauthorized() error {
+	return w.statusShouldBe(http.StatusUnauthorized, "request")
 }
 
 func InitializeScenario(ctx *godog.ScenarioContext) {
@@ -128,11 +181,18 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I sign in with email "([^"]*)" and the correct password$`, w.signInCorrect)
 	ctx.Step(`^I sign in with email "([^"]*)" and an incorrect password$`, w.signInIncorrect)
 
+	ctx.Step(`^I have registered as "([^"]*)"$`, w.iHaveRegisteredAs)
+	ctx.Step(`^I request my profile with my token$`, w.requestProfileWithMyToken)
+	ctx.Step(`^I request my profile without a token$`, w.requestProfileWithoutToken)
+	ctx.Step(`^I request my profile with the token "([^"]*)"$`, w.requestProfileWithToken)
+
 	ctx.Step(`^my account is created$`, w.accountCreated)
 	ctx.Step(`^I receive an authentication token$`, w.receiveToken)
 	ctx.Step(`^my actor handle is "([^"]*)" on this instance$`, w.actorHandleIs)
+	ctx.Step(`^my profile is returned$`, w.profileReturned)
 	ctx.Step(`^registration is rejected as a conflict$`, w.registrationIsConflict)
 	ctx.Step(`^authentication is rejected$`, w.authenticationRejected)
+	ctx.Step(`^the request is unauthorized$`, w.requestUnauthorized)
 
 	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 		if w.server != nil {

@@ -42,6 +42,6 @@ func instanceDomain() string {
 // behind the same ports.
 func routes() http.Handler {
 	instance := domain.Instance{ID: domain.NewID(), Domain: instanceDomain()}
-	authsvc := auth.NewService(auth.NewMemoryStore(), instance)
+	authsvc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
 	return rest.New(authsvc)
 }

@@ -6,6 +6,37 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Second slice: authenticated identity (GET /me)
+
+Closed the "tokens minted but never validated" gap from the previous slice.
+The server now recognises a caller from their bearer token.
+
+- **Spec first:** `identity.feature` (fetch own profile with a valid token;
+  reject missing token; reject unknown token). `api/openapi.yaml` gains a
+  `bearerAuth` security scheme and `GET /me` (200 `Actor` / 401 `Problem`).
+- **Sessions are now a port (ADR-0006).** `auth.Sessions` (`Issue`/`Resolve`)
+  with an in-memory adapter; `Service.Register`/`Authenticate` mint tokens
+  through it, and `Service.ActorFromToken` resolves a token back to its actor.
+  Token generation moved out of the service into the adapter. Added
+  `ErrInvalidToken`.
+- **Adopted chi (ADR-0007).** `internal/rest` now uses `go-chi/chi/v5`: public
+  routes plus a protected group behind a `requireAuth` middleware that resolves
+  the token and stashes the actor in the request context. This realises the
+  router decision deferred in the previous entry — first middleware, so chi
+  earns its place. Bearer parsing is case-insensitive (RFC 7235).
+- **Dependency:** `github.com/go-chi/chi/v5` (v5.3.0) — runtime, zero-dep core,
+  confined to the `rest` adapter.
+- **Acceptance:** 7 scenarios / 28 steps green (4 prior + 3 new); unit test
+  added for `ActorFromToken` incl. the invalid-token path.
+
+**Still deferred (unchanged):**
+- Sessions are in-memory and never expire/revoke; a persistent adapter with
+  expiry lands with the Postgres slice. No outbox event on login yet.
+- Third-party / OAuth2 scoped tokens (ADR-0006) remain roadmap; today's tokens
+  are interactive-user session tokens.
+
+---
+
 ## 2026-06-19 — First feature slice: registration & sign-in (red→green)
 
 Wired `auth.feature` to godog and implemented the four scenarios end to end

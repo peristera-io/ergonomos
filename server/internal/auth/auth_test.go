@@ -9,7 +9,7 @@ import (
 )
 
 func newTestService() *Service {
-	return NewService(NewMemoryStore(), domain.Instance{ID: domain.NewID(), Domain: "localhost"})
+	return NewService(NewMemoryStore(), NewMemorySessions(), domain.Instance{ID: domain.NewID(), Domain: "localhost"})
 }
 
 func TestRegister(t *testing.T) {
@@ -87,6 +87,28 @@ func TestAuthenticate(t *testing.T) {
 			t.Fatalf("err = %v, want ErrInvalidCredentials", err)
 		}
 	})
+}
+
+func TestActorFromToken(t *testing.T) {
+	svc := newTestService()
+	ctx := context.Background()
+
+	actor, token, err := svc.Register(ctx, "ada@example.org", "correct horse battery")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	got, err := svc.ActorFromToken(ctx, token)
+	if err != nil {
+		t.Fatalf("ActorFromToken: %v", err)
+	}
+	if got.ID != actor.ID {
+		t.Errorf("resolved actor id = %q, want %q", got.ID, actor.ID)
+	}
+
+	if _, err := svc.ActorFromToken(ctx, "bogus"); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("ActorFromToken(bogus) err = %v, want ErrInvalidToken", err)
+	}
 }
 
 func TestPasswordHashRoundTrip(t *testing.T) {

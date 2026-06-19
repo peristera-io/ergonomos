@@ -1,12 +1,20 @@
 // Package rest is the HTTP delivery adapter (ADR-0006 hexagonal core). It
 // translates the OpenAPI contract in api/openapi.yaml into calls on the
 // application services and maps errors to RFC 9457 problem details.
+//
+// Routing and middleware use go-chi/chi: the stdlib ServeMux covers method and
+// path routing, but chi gives ergonomic middleware and route grouping, which
+// arrive with the first protected route (see docs/adr/0007).
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/peristera-io/ergonomos/server/internal/auth"
 	"github.com/peristera-io/ergonomos/server/internal/domain"
@@ -14,12 +22,24 @@ import (
 
 // New builds the HTTP handler for the whole API surface.
 func New(authsvc *auth.Service) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handleHealthz)
-	mux.HandleFunc("POST /auth/register", handleRegister(authsvc))
-	mux.HandleFunc("POST /auth/sessions", handleSignIn(authsvc))
-	return mux
+	r := chi.NewRouter()
+
+	r.Get("/healthz", handleHealthz)
+	r.Post("/auth/register", handleRegister(authsvc))
+	r.Post("/auth/sessions", handleSignIn(authsvc))
+
+	r.Group(func(r chi.Router) {
+		r.Use(requireAuth(authsvc))
+		r.Get("/me", handleMe)
+	})
+
+	return r
 }
+
+// ctxKey is the unexported request-context key type for this package.
+type ctxKey int
+
+const actorKey ctxKey = iota
 
 type credentials struct {
 	Email    string `json:"email"`
@@ -80,6 +100,42 @@ func handleSignIn(svc *auth.Service) http.HandlerFunc {
 	}
 }
 
+func handleMe(w http.ResponseWriter, r *http.Request) {
+	actor, _ := r.Context().Value(actorKey).(domain.Actor)
+	writeJSON(w, http.StatusOK, toActorView(actor))
+}
+
+// requireAuth is middleware that resolves the bearer token to an actor and
+// stashes it in the request context, or replies 401.
+func requireAuth(svc *auth.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, ok := bearerToken(r)
+			if !ok {
+				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "A bearer token is required.")
+				return
+			}
+			actor, err := svc.ActorFromToken(r.Context(), token)
+			if err != nil {
+				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "The token is missing or invalid.")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey, actor)))
+		})
+	}
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>"
+// header. The scheme is matched case-insensitively per RFC 7235.
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+		return "", false
+	}
+	return strings.TrimSpace(h[len(prefix):]), true
+}
+
 func decodeCredentials(w http.ResponseWriter, r *http.Request) (credentials, bool) {
 	var c credentials
 	dec := json.NewDecoder(r.Body)
@@ -95,16 +151,17 @@ func decodeCredentials(w http.ResponseWriter, r *http.Request) (credentials, boo
 	return c, true
 }
 
-func newSessionView(actor domain.Actor, token string) sessionView {
-	return sessionView{
-		Token: token,
-		Actor: actorView{
-			ID:       string(actor.ID),
-			Handle:   actor.Handle,
-			Instance: actor.Instance.Domain,
-			Local:    actor.Local,
-		},
+func toActorView(a domain.Actor) actorView {
+	return actorView{
+		ID:       string(a.ID),
+		Handle:   a.Handle,
+		Instance: a.Instance.Domain,
+		Local:    a.Local,
 	}
+}
+
+func newSessionView(actor domain.Actor, token string) sessionView {
+	return sessionView{Token: token, Actor: toActorView(actor)}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

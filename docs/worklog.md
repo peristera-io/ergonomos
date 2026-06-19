@@ -6,6 +6,14 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Add CONTRIBUTORS.md stub
+
+Added a curated `CONTRIBUTORS.md` acknowledgements list (seeded with the
+maintainer), explicitly distinct from the legal CLA-signature record
+(`signatures/cla.json`) and from git history. Linked it from `CONTRIBUTING.md`.
+
+---
+
 ## 2026-06-19 — Switch contribution model from DCO to CLA
 
 Replaced the DCO with a **Contributor License Agreement that includes a

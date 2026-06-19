@@ -36,6 +36,12 @@ covers all your future contributions.
 Contributing on behalf of an employer or other entity? Contact the maintainers
 to arrange a **Corporate CLA** before submitting.
 
+## Recognition
+
+We keep a `CONTRIBUTORS.md` acknowledgements list. Feel free to add yourself in
+your first pull request — it's separate from the CLA signature record, just a
+thank-you.
+
 ## License
 
 By contributing you agree that your contributions are licensed as set out in

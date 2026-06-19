@@ -24,8 +24,7 @@ This is a legally binding document, so read it carefully before agreeing.
   example pull requests, commits, patches, issues, or messages — **except**
   communication that You conspicuously mark in writing as "Not a Contribution."
 - **"We" / "Us" / "Our"** means the maintainers of ergonomos, currently the
-  repository owner (jlspielmann). *(Replace with the legal name or entity that
-  will hold these rights before relying on this Agreement.)*
+  repository owner Jean-Luc Spielmann
 
 ## 2. You retain ownership
 
@@ -102,8 +101,7 @@ express or implied.
 ## 11. Miscellaneous
 
 This Agreement is governed by the laws of Luxembourg, without regard to its
-conflict-of-law provisions. *(Adjust to the governing jurisdiction You
-intend.)* If any provision of this Agreement is held unenforceable, the
+conflict-of-law provisions. If any provision of this Agreement is held unenforceable, the
 remaining provisions remain in full force and effect.
 
 ## Corporate contributions

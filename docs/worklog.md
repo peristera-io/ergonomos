@@ -6,6 +6,49 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Third slice: task management + first authz/outbox use
+
+The first slice with a domain aggregate. Tasks can be created, retrieved, and
+listed — and, crucially, this is where `authz.Authorizer` (ADR-0002) and the
+event outbox (ADR-0003) finally do real work instead of just existing as ports.
+
+- **Strict BDD harness.** Flipped `godog.Options.Strict = true`. Until now a new
+  `.feature` with no step definitions passed silently (undefined steps are
+  non-fatal by default), so the spec couldn't go red. Strict makes undefined or
+  pending steps fail the run — the red in red→green is now real.
+- **Spec first (ADR-0001):** rewrote `task.feature` as "Task management" with
+  cross-user isolation as the centerpiece (another user gets 404 for my task;
+  my list shows only my tasks with a second user's task present), plus
+  empty-title 400, unknown-id 404, and the unauthenticated 401 cases.
+  `api/openapi.yaml` gains `Task`/`TaskInput` schemas and `POST /tasks`,
+  `GET /tasks`, `GET /tasks/{id}` (all bearer-protected).
+- **`internal/task` aggregate (ADR-0006).** `Task{ID,Title,Owner,CreatedAt}`
+  with a `Store` port (in-memory adapter) and a `Service` over three ports:
+  `Store`, `authz.Authorizer`, `events.Outbox`. `Create` validates → stores →
+  writes the `user:<id> owner task:<id>` tuple → appends a `task.created`
+  event. `Get` runs `authz.Check` **first**, so unknown id and "someone else's
+  task" both collapse to `ErrNotFound` — no existence leak. `List` is
+  owner-scoped, sorted by ULID.
+- **`events.MemoryOutbox`** added (slice+mutex, `Events()` accessor) — first
+  concrete outbox. The transactional Postgres adapter replaces it later behind
+  the same port.
+- **REST:** `rest.New` now takes the task service; task handlers live in the
+  existing `requireAuth` chi group. `main.go` wires `authz.NewMemory()` and
+  `events.NewMemoryOutbox()`.
+- **Acceptance:** 16 scenarios / 76 steps green (7 prior + 9 new). Unit tests on
+  `task.Service` cover the tuple write, the emitted event, ownership
+  enforcement, and owner-scoped sorted listing.
+
+**Deferred (unchanged + new):**
+- The authz model is exact-tuple match only (`authz.Memory`); relation rewrites
+  (`editor` implies `viewer`, sharing) arrive with embedded OpenFGA. `Get`
+  therefore checks `owner` directly — viewers/sharing land with that slice.
+- The outbox is in-memory and nothing consumes it yet; the dispatcher
+  (authz-sync, realtime, federation) is still roadmap (ADR-0003).
+- No update/delete/complete on tasks yet; this slice is create/read/list.
+
+---
+
 ## 2026-06-19 — Second slice: authenticated identity (GET /me)
 
 Closed the "tokens minted but never validated" gap from the previous slice.

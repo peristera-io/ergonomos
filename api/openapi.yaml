@@ -98,6 +98,88 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /tasks:
+    post:
+      summary: Create a task owned by the authenticated actor
+      operationId: createTask
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '201':
+          description: The created task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      summary: List the tasks owned by the authenticated actor
+      operationId: listTasks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's tasks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tasks/{id}:
+    get:
+      summary: Retrieve one of the authenticated actor's tasks
+      operationId: getTask
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Opaque task identifier.
+      responses:
+        '200':
+          description: The requested task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: |
+            No such task is visible to the caller. Unknown id and a task owned
+            by someone else both return 404 so the API cannot be used to probe
+            for others' tasks.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   securitySchemes:
     bearerAuth:
@@ -160,6 +242,34 @@ components:
           description: Opaque bearer token for the authenticated actor.
         actor:
           $ref: '#/components/schemas/Actor'
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          example: Write acceptance tests
+    Task:
+      description: A unit of work owned by an actor (ADR-0006, first-class aggregate).
+      type: object
+      required: [id, title, owner, createdAt]
+      properties:
+        id:
+          type: string
+          description: Opaque, globally-unique identifier (ULID).
+          example: 01J9Z3K7QF8XN2M4R5T6V7W8Y9
+        title:
+          type: string
+          example: Write acceptance tests
+        owner:
+          type: string
+          description: Opaque id of the owning actor.
+          example: 01J9Z3K7QF8XN2M4R5T6V7W8Y9
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation time (UTC).
     Problem:
       description: RFC 9457 problem detail
       type: object

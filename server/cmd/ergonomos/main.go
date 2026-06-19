@@ -11,8 +11,11 @@ import (
 	"os"
 
 	"github.com/peristera-io/ergonomos/server/internal/auth"
+	"github.com/peristera-io/ergonomos/server/internal/authz"
 	"github.com/peristera-io/ergonomos/server/internal/domain"
+	"github.com/peristera-io/ergonomos/server/internal/events"
 	"github.com/peristera-io/ergonomos/server/internal/rest"
+	"github.com/peristera-io/ergonomos/server/internal/task"
 )
 
 func main() {
@@ -43,5 +46,6 @@ func instanceDomain() string {
 func routes() http.Handler {
 	instance := domain.Instance{ID: domain.NewID(), Domain: instanceDomain()}
 	authsvc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
-	return rest.New(authsvc)
+	tasksvc := task.NewService(task.NewMemoryStore(), authz.NewMemory(), events.NewMemoryOutbox())
+	return rest.New(authsvc, tasksvc)
 }

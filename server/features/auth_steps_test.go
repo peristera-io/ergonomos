@@ -12,8 +12,11 @@ import (
 	"github.com/cucumber/godog"
 
 	"github.com/peristera-io/ergonomos/server/internal/auth"
+	"github.com/peristera-io/ergonomos/server/internal/authz"
 	"github.com/peristera-io/ergonomos/server/internal/domain"
+	"github.com/peristera-io/ergonomos/server/internal/events"
 	"github.com/peristera-io/ergonomos/server/internal/rest"
+	"github.com/peristera-io/ergonomos/server/internal/task"
 )
 
 // validPassword is the password the specs mean by "a valid password" / "the
@@ -21,18 +24,27 @@ import (
 const validPassword = "correct horse battery staple"
 
 // world holds the per-scenario state: the running instance, the most recent
-// token observed, and the last response seen through the API.
+// token observed, and the last response seen through the API. Task scenarios
+// add the caller's actor id, a second user's token, and the last task/list
+// observed.
 type world struct {
 	server *httptest.Server
 	status int
 	body   map[string]any
+	list   []any
 	token  string
+
+	myActorID  string
+	otherToken string
+	taskID     string
+	myTitles   []string
 }
 
 func (w *world) aRunningInstance() error {
 	instance := domain.Instance{ID: domain.NewID(), Domain: "localhost"}
-	svc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
-	w.server = httptest.NewServer(rest.New(svc))
+	authsvc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
+	tasksvc := task.NewService(task.NewMemoryStore(), authz.NewMemory(), events.NewMemoryOutbox())
+	w.server = httptest.NewServer(rest.New(authsvc, tasksvc))
 	return nil
 }
 
@@ -69,13 +81,21 @@ func (w *world) record(resp *http.Response) error {
 	defer resp.Body.Close()
 	w.status = resp.StatusCode
 	w.body = nil
+	w.list = nil
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 	if len(data) > 0 {
-		if err := json.Unmarshal(data, &w.body); err != nil {
+		var v any
+		if err := json.Unmarshal(data, &v); err != nil {
 			return fmt.Errorf("decoding response body %q: %w", data, err)
+		}
+		switch decoded := v.(type) {
+		case map[string]any:
+			w.body = decoded
+		case []any:
+			w.list = decoded
 		}
 	}
 	if t, ok := w.body["token"].(string); ok {
@@ -154,6 +174,9 @@ func (w *world) iHaveRegisteredAs(email string) error {
 	if w.status != http.StatusCreated {
 		return fmt.Errorf("setup: registering %q returned status %d", email, w.status)
 	}
+	if actor, ok := w.body["actor"].(map[string]any); ok {
+		w.myActorID, _ = actor["id"].(string)
+	}
 	return nil
 }
 
@@ -193,6 +216,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^registration is rejected as a conflict$`, w.registrationIsConflict)
 	ctx.Step(`^authentication is rejected$`, w.authenticationRejected)
 	ctx.Step(`^the request is unauthorized$`, w.requestUnauthorized)
+
+	registerTaskSteps(ctx, w)
 
 	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 		if w.server != nil {

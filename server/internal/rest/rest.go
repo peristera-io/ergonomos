@@ -13,15 +13,17 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/peristera-io/ergonomos/server/internal/auth"
 	"github.com/peristera-io/ergonomos/server/internal/domain"
+	"github.com/peristera-io/ergonomos/server/internal/task"
 )
 
 // New builds the HTTP handler for the whole API surface.
-func New(authsvc *auth.Service) http.Handler {
+func New(authsvc *auth.Service, tasksvc *task.Service) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/healthz", handleHealthz)
@@ -31,6 +33,9 @@ func New(authsvc *auth.Service) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(requireAuth(authsvc))
 		r.Get("/me", handleMe)
+		r.Post("/tasks", handleCreateTask(tasksvc))
+		r.Get("/tasks", handleListTasks(tasksvc))
+		r.Get("/tasks/{id}", handleGetTask(tasksvc))
 	})
 
 	return r
@@ -56,6 +61,13 @@ type actorView struct {
 type sessionView struct {
 	Token string    `json:"token"`
 	Actor actorView `json:"actor"`
+}
+
+type taskView struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Owner     string `json:"owner"`
+	CreatedAt string `json:"createdAt"`
 }
 
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -103,6 +115,62 @@ func handleSignIn(svc *auth.Service) http.HandlerFunc {
 func handleMe(w http.ResponseWriter, r *http.Request) {
 	actor, _ := r.Context().Value(actorKey).(domain.Actor)
 	writeJSON(w, http.StatusOK, toActorView(actor))
+}
+
+func handleCreateTask(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Title string `json:"title"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			writeProblem(w, http.StatusBadRequest, "Invalid request body", "Expected a JSON object with a title.")
+			return
+		}
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		t, err := svc.Create(r.Context(), actor, in.Title)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusCreated, toTaskView(t))
+		case errors.Is(err, task.ErrEmptyTitle):
+			writeProblem(w, http.StatusBadRequest, "Invalid task", "A task title must not be empty.")
+		default:
+			writeProblem(w, http.StatusInternalServerError, "Could not create task", "")
+		}
+	}
+}
+
+func handleListTasks(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		tasks, err := svc.List(r.Context(), actor)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, "Could not list tasks", "")
+			return
+		}
+		views := make([]taskView, 0, len(tasks))
+		for _, t := range tasks {
+			views = append(views, toTaskView(t))
+		}
+		writeJSON(w, http.StatusOK, views)
+	}
+}
+
+func handleGetTask(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		id := domain.ID(chi.URLParam(r, "id"))
+		t, err := svc.Get(r.Context(), actor, id)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, toTaskView(t))
+		case errors.Is(err, task.ErrNotFound):
+			writeProblem(w, http.StatusNotFound, "Task not found", "No such task is visible to you.")
+		default:
+			writeProblem(w, http.StatusInternalServerError, "Could not retrieve task", "")
+		}
+	}
 }
 
 // requireAuth is middleware that resolves the bearer token to an actor and
@@ -162,6 +230,15 @@ func toActorView(a domain.Actor) actorView {
 
 func newSessionView(actor domain.Actor, token string) sessionView {
 	return sessionView{Token: token, Actor: toActorView(actor)}
+}
+
+func toTaskView(t task.Task) taskView {
+	return taskView{
+		ID:        string(t.ID),
+		Title:     t.Title,
+		Owner:     string(t.Owner),
+		CreatedAt: t.CreatedAt.Format(time.RFC3339Nano),
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

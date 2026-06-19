@@ -15,9 +15,13 @@ func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
-			Format:   "pretty",
-			Paths:    []string{"."},
-			Output:   colors.Colored(os.Stdout),
+			Format: "pretty",
+			Paths:  []string{"."},
+			Output: colors.Colored(os.Stdout),
+			// Strict fails the run on undefined or pending steps, so a new
+			// .feature with no step definitions goes red instead of passing
+			// silently (the default treats undefined steps as non-fatal).
+			Strict:   true,
 			TestingT: t,
 		},
 	}

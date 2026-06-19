@@ -43,7 +43,7 @@ type world struct {
 func (w *world) aRunningInstance() error {
 	instance := domain.Instance{ID: domain.NewID(), Domain: "localhost"}
 	authsvc := auth.NewService(auth.NewMemoryStore(), auth.NewMemorySessions(), instance)
-	tasksvc := task.NewService(task.NewMemoryStore(), authz.NewMemory(), events.NewMemoryOutbox())
+	tasksvc := task.NewService(task.NewMemoryStore(), authz.NewMemory(), events.NewMemoryOutbox(), task.NopTransactor{})
 	w.server = httptest.NewServer(rest.New(authsvc, tasksvc))
 	return nil
 }

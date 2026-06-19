@@ -6,6 +6,44 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Sixth slice: Postgres persistence (pgx + goose)
+
+Gave the engine a durable backend behind the existing ports — no port
+signatures changed, so the in-memory path and the BDD suite are untouched.
+
+- **Decision (ADR-0008):** pgx/v5 + pgxpool driver; goose-as-library for
+  migrations (embedded SQL via `embed.FS`, applied on boot); a
+  **context-propagated transaction** for the unit of work; the owner authz
+  tuple written **inline** in the same tx (interim deviation from ADR-0003's
+  consumer-driven sync, until OpenFGA + a dispatcher land); sessions stay
+  in-memory; backend selected by `DATABASE_URL`.
+- **`task.Transactor` port + `NopTransactor`:** the service now wraps each
+  multi-step write in `tx.WithinTx(ctx, …)`. In-memory uses `NopTransactor`
+  (calls fn directly); Postgres' `WithinTx` stashes a `pgx.Tx` in the context
+  and `db.q(ctx)` resolves tx-or-pool, so adapters commit/roll back together.
+- **`internal/postgres`:** `DB` (pool, `WithinTx`, goose `Migrate`) plus the
+  four adapters — `auth.Store` (unique-violation → `ErrEmailTaken`,
+  no-rows → `ErrNotFound`), `task.Store` (0-rows-affected → `ErrNotFound`),
+  `authz.Authorizer` (exact-tuple `SELECT EXISTS` / `INSERT … ON CONFLICT
+  DO NOTHING` / `DELETE`), and `events.Outbox` (payload as `jsonb`).
+- **Migration `00001_init.sql`:** `users`, `tasks` (+owner index),
+  `authz_tuples`, `outbox` (+partial index on unpublished events).
+- **Wiring:** `cmd/ergonomos` opens Postgres, migrates, and backs all task
+  ports with one `*DB` when `DATABASE_URL` is set; in-memory otherwise.
+- **Gated integration tests:** skipped unless `DATABASE_URL` is set, so plain
+  `go test ./...` stays driver-free. Cover each adapter round-trip plus a
+  **rollback/atomicity** test (fn returns an error → neither the task nor its
+  outbox event persists) and an end-to-end service Create commit. Verified
+  green against Postgres 17 locally; **CI** now runs them via a `postgres:17`
+  service.
+
+**Deferred (unchanged):** authz is still exact-tuple owner-only pending
+embedded OpenFGA; nothing consumes the outbox yet. Note: goose pulls in a
+sqlite driver transitively — a wart against the deliberate-dependency ethos,
+acceptable for now but worth revisiting.
+
+---
+
 ## 2026-06-19 — Fifth slice: task deletion
 
 Rounded out the task aggregate's lifecycle with deletion — the first operation

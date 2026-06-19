@@ -33,6 +33,22 @@ var (
 // ownerRelation is the relation a creator holds over their task.
 const ownerRelation authz.Relation = "owner"
 
+// Transactor runs fn within a single transaction (ADR-0008). Any port
+// operations fn performs through the provided context — the task store, the
+// authorizer, the outbox — commit or roll back together.
+type Transactor interface {
+	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// NopTransactor runs fn directly with no transaction, for the in-memory
+// adapters that need no boundary.
+type NopTransactor struct{}
+
+// WithinTx just calls fn.
+func (NopTransactor) WithinTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return fn(ctx)
+}
+
 // Task is a unit of work owned by an actor.
 type Task struct {
 	ID        domain.ID
@@ -61,11 +77,13 @@ type Service struct {
 	store  Store
 	authz  authz.Authorizer
 	outbox events.Outbox
+	tx     Transactor
 }
 
-// NewService builds a Service over its ports.
-func NewService(store Store, authorizer authz.Authorizer, outbox events.Outbox) *Service {
-	return &Service{store: store, authz: authorizer, outbox: outbox}
+// NewService builds a Service over its ports. tx defines the transaction
+// boundary for multi-step writes; pass NopTransactor for in-memory adapters.
+func NewService(store Store, authorizer authz.Authorizer, outbox events.Outbox, tx Transactor) *Service {
+	return &Service{store: store, authz: authorizer, outbox: outbox, tx: tx}
 }
 
 // Create stores a new task owned by owner, records the owner authorization
@@ -81,13 +99,16 @@ func (s *Service) Create(ctx context.Context, owner domain.Actor, title string) 
 		Owner:     owner.ID,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := s.store.Create(ctx, t); err != nil {
-		return Task{}, err
-	}
-	if err := s.authz.Write(ctx, []authz.Tuple{ownerTuple(t.Owner, t.ID)}, nil); err != nil {
-		return Task{}, err
-	}
-	if err := s.outbox.Append(ctx, createdEvent(t)); err != nil {
+	err := s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.store.Create(ctx, t); err != nil {
+			return err
+		}
+		if err := s.authz.Write(ctx, []authz.Tuple{ownerTuple(t.Owner, t.ID)}, nil); err != nil {
+			return err
+		}
+		return s.outbox.Append(ctx, createdEvent(t))
+	})
+	if err != nil {
 		return Task{}, err
 	}
 	return t, nil
@@ -112,10 +133,13 @@ func (s *Service) UpdateTitle(ctx context.Context, actor domain.Actor, id domain
 		return Task{}, ErrEmptyTitle
 	}
 	t.Title = title
-	if err := s.store.Update(ctx, t); err != nil {
-		return Task{}, err
-	}
-	if err := s.outbox.Append(ctx, changedEvent("task.updated", t)); err != nil {
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.store.Update(ctx, t); err != nil {
+			return err
+		}
+		return s.outbox.Append(ctx, changedEvent("task.updated", t))
+	})
+	if err != nil {
 		return Task{}, err
 	}
 	return t, nil
@@ -130,10 +154,13 @@ func (s *Service) Complete(ctx context.Context, actor domain.Actor, id domain.ID
 		return Task{}, err
 	}
 	t.Done = true
-	if err := s.store.Update(ctx, t); err != nil {
-		return Task{}, err
-	}
-	if err := s.outbox.Append(ctx, changedEvent("task.completed", t)); err != nil {
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.store.Update(ctx, t); err != nil {
+			return err
+		}
+		return s.outbox.Append(ctx, changedEvent("task.completed", t))
+	})
+	if err != nil {
 		return Task{}, err
 	}
 	return t, nil
@@ -146,16 +173,15 @@ func (s *Service) Delete(ctx context.Context, actor domain.Actor, id domain.ID) 
 	if err != nil {
 		return err
 	}
-	if err := s.store.Delete(ctx, id); err != nil {
-		return err
-	}
-	if err := s.authz.Write(ctx, nil, []authz.Tuple{ownerTuple(t.Owner, t.ID)}); err != nil {
-		return err
-	}
-	if err := s.outbox.Append(ctx, changedEvent("task.deleted", t)); err != nil {
-		return err
-	}
-	return nil
+	return s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.store.Delete(ctx, id); err != nil {
+			return err
+		}
+		if err := s.authz.Write(ctx, nil, []authz.Tuple{ownerTuple(t.Owner, t.ID)}); err != nil {
+			return err
+		}
+		return s.outbox.Append(ctx, changedEvent("task.deleted", t))
+	})
 }
 
 // owned returns actor's task, or ErrNotFound. The authorization check runs

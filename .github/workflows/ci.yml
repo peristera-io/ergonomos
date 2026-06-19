@@ -11,6 +11,23 @@ jobs:
     defaults:
       run:
         working-directory: server
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ergonomos
+          POSTGRES_PASSWORD: ergonomos
+          POSTGRES_DB: ergonomos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ergonomos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Set so the gated Postgres integration tests run in CI (ADR-0008).
+      DATABASE_URL: postgres://ergonomos:ergonomos@localhost:5432/ergonomos
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

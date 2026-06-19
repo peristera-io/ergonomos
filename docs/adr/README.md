@@ -16,6 +16,7 @@ the old one rather than editing the original.
 | 0005 | Contribution licensing — CLA with relicensing grant | Accepted (amends 0001) |
 | 0006 | ergonomos as a network-embeddable engine (API + federation) | Accepted |
 | 0007 | HTTP router and middleware — adopt go-chi/chi | Accepted |
+| 0008 | Persistence — pgx, goose, and a context-propagated transaction | Accepted |
 
 ## Template
 

@@ -20,7 +20,7 @@ type fixture struct {
 func newFixture() fixture {
 	a := authz.NewMemory()
 	o := events.NewMemoryOutbox()
-	return fixture{svc: NewService(NewMemoryStore(), a, o), authz: a, outbox: o}
+	return fixture{svc: NewService(NewMemoryStore(), a, o, NopTransactor{}), authz: a, outbox: o}
 }
 
 func TestCreateWritesOwnerTupleAndEmitsEvent(t *testing.T) {

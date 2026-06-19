@@ -6,6 +6,28 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Switch contribution model from DCO to CLA
+
+Replaced the DCO with a **Contributor License Agreement that includes a
+relicensing grant** (**ADR-0005**, amending ADR-0001), to preserve the option
+to relicense/dual-license in future without chasing down past contributors.
+
+- Added `CLA.md` (individual CLA; contributors keep copyright, grant a broad
+  license including the right to relicense; moral-rights non-assertion for
+  EU/Luxembourg). Template — needs legal review and a finalized "Us" party +
+  governing jurisdiction.
+- Added `.github/workflows/cla.yml` (CLA Assistant lite); signatures stored in
+  `signatures/cla.json`, committed by `GITHUB_TOKEN`.
+- Removed the `DCO` file and the `git commit -s` requirement.
+- Updated `CONTRIBUTING.md`, `README.md`, `LICENSE-EXCEPTION.md`, and the ADR
+  index to point at the CLA.
+
+**Publish-time TODO (in `cla.yml`):** set `path-to-document` to the real
+`CLA.md` URL, add the repo owner to `allowlist`, and pin the action to its
+latest release.
+
+---
+
 ## 2026-06-19 — Project scaffolding and foundational decisions
 
 Set up the repository skeleton and recorded the founding decisions.

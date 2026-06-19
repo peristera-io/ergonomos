@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-19
+- **Amended:** the DCO-for-contributions decision below is superseded by
+  ADR-0005 (CLA with relicensing grant).
 
 ## Context
 

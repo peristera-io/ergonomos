@@ -15,23 +15,29 @@ manual for the repo and applies to humans and LLM agents alike. In short:
   convention emerges.
 - Keep changes small and CI green.
 
-## Developer Certificate of Origin (DCO)
+## Contributor License Agreement (CLA)
 
-Contributions are accepted under the **Developer Certificate of Origin 1.1**
-(see the `DCO` file). This certifies you have the right to submit your work
-under the project's license.
+Before we can accept your contribution, you must agree to the ergonomos
+**Contributor License Agreement** (`CLA.md`). Under it you **keep the copyright**
+to your work and grant the project a broad license — including the right to
+relicense — so the project retains the flexibility to change its license or
+dual-license in the future. See **ADR-0005** for the reasoning.
 
-Sign off every commit with the `-s` flag, which appends a `Signed-off-by`
-line using your real name and email:
+**How to sign:** open your pull request as usual. A bot
+([CLA Assistant](https://github.com/contributor-assistant/github-action))
+checks whether you've signed. If you haven't, it comments with instructions —
+you sign by replying on the PR with the exact phrase:
 
-```sh
-git commit -s -m "Your message"
-```
+> I have read the CLA Document and I hereby sign the CLA
 
-By signing off you agree to the DCO and that your contribution is licensed
-under AGPL-3.0-or-later **with** the App Store distribution exception
-(`LICENSE-EXCEPTION.md`), so the project can continue to grant that exception.
+Your signature is recorded in `signatures/cla.json`. You sign only once; it
+covers all your future contributions.
+
+Contributing on behalf of an employer or other entity? Contact the maintainers
+to arrange a **Corporate CLA** before submitting.
 
 ## License
 
-By contributing you agree that your contributions are licensed as above.
+By contributing you agree that your contributions are licensed as set out in
+the CLA — currently AGPL-3.0-or-later **with** the App Store distribution
+exception (`LICENSE`, `LICENSE-EXCEPTION.md`).

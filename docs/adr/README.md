@@ -13,6 +13,7 @@ the old one rather than editing the original.
 | 0002 | Authorization: embed OpenFGA behind an interface | Accepted |
 | 0003 | Domain-event / transactional-outbox backbone | Accepted |
 | 0004 | Federation-readiness constraints        | Accepted |
+| 0005 | Contribution licensing — CLA with relicensing grant | Accepted (amends 0001) |
 
 ## Template
 

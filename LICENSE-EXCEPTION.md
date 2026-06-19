@@ -31,6 +31,6 @@ required to keep this exception.
 
 This exception applies to the ergonomos project as a whole. Because the
 project intends to accept third-party contributions, all contributors agree
-(via the Developer Certificate of Origin — see `CONTRIBUTING.md`) that their
-contributions are licensed such that this exception may continue to be
-granted.
+(via the Contributor License Agreement — see `CONTRIBUTING.md` and `CLA.md`)
+that their contributions are licensed such that this exception may continue to
+be granted.

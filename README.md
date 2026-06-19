@@ -66,5 +66,6 @@ implemented red→green.
 ## License
 
 AGPL-3.0-or-later (`LICENSE`) with the App Store distribution exception
-(`LICENSE-EXCEPTION.md`). Contributions are accepted under the Developer
-Certificate of Origin — see `CONTRIBUTING.md`.
+(`LICENSE-EXCEPTION.md`). Contributions are accepted under a Contributor
+License Agreement that lets the project relicense in future — see
+`CONTRIBUTING.md` and `CLA.md`.

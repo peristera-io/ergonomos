@@ -51,6 +51,15 @@ After any meaningful change:
   federation delivery all consume the same event stream. (ADR-0003)
 - **The OpenAPI spec (`api/openapi.yaml`) is the source of truth** for the
   REST surface. Change the spec first, then the code. (ADR-0001)
+- **Keep a hexagonal core.** The task/domain engine depends only on ports
+  (interfaces); HTTP, auth, and storage are adapters behind them. ergonomos is
+  embeddable over the network (API + federation), not as a linked library, so
+  the engine stays in `internal/`. (ADR-0006)
+- **Task is a first-class aggregate** — it can exist, be shared, and sync on
+  its own, not only nested under a Project/Document. (ADR-0006)
+- **Don't assume the caller is the interactive user.** Authorization must leave
+  room for third-party apps (OAuth2 / scoped tokens), distinct from end-user
+  authentication. (ADR-0006)
 - **Times are UTC.** Money/quantities, if any, are integers in base units.
 
 ## Conventions for working with this repo

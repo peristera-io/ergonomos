@@ -6,6 +6,27 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Decide engine integration model (embeddable over the network)
+
+Confirmed ergonomos can serve as an embeddable todo engine for two scenarios —
+a third-party SaaS running its own instance with tasks mirrored to the user's
+phone (federation), and a third-party app pushing tasks/completions into the
+user's own server (API). Recorded **ADR-0006**.
+
+- Chose **network embedding (API + federation)**, not a linked Go library;
+  engine stays in `internal/`.
+- Standing constraints added to `CLAUDE.md`: hexagonal core (ports/adapters),
+  Task as a first-class aggregate, and "don't assume the caller is the
+  interactive user."
+- Roadmap items (not built, substrate ready): third-party app authorization
+  (OAuth2 / scoped tokens) layered into the auth slice, and an outbound
+  webhook / event-subscription surface on the outbox (ADR-0003).
+- Licensing confirmed favorable: API integration is not a derivative work, so
+  integrators aren't bound by the AGPL; code-embedding stays available via
+  commercial dual-licensing (ADR-0005).
+
+---
+
 ## 2026-06-19 — Add CONTRIBUTORS.md stub
 
 Added a curated `CONTRIBUTORS.md` acknowledgements list (seeded with the

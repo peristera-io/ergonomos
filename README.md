@@ -55,9 +55,11 @@ fvm flutter pub get
 
 ## Status
 
-Early scaffolding. The first feature slice (user registration & authentication)
-is specified in `server/features/auth.feature` and is the next thing to be
-implemented red→green.
+Two feature slices are complete and green:
+- User registration & authentication (`POST /auth/register`, `POST /auth/sessions`)
+- Authenticated identity (`GET /me` with bearer token)
+
+All acceptance tests pass (7 scenarios / 28 steps). Next: persistent storage (Postgres) and authorization slices.
 
 ## License
 

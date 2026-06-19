@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: ergonomos API
+  version: 0.0.0
+  description: |
+    REST contract for the ergonomos backend and the source of truth for the
+    typed Dart client (see docs/adr/0001).
+
+    Conventions:
+      * All resource identifiers are opaque, globally-unique strings (never
+        sequential integers) — see docs/adr/0004 (federation-readiness).
+      * Shareable resources expose a canonical URI and a home-instance marker.
+      * Errors use RFC 9457 problem details.
+  license:
+    name: AGPL-3.0-or-later WITH ergonomos-app-store-exception
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: getHealthz
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+    Problem:
+      description: RFC 9457 problem detail
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

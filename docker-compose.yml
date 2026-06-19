@@ -1,0 +1,23 @@
+# Local development dependencies for ergonomos.
+#
+# The authorization engine (OpenFGA) is embedded in the Go binary (ADR-0002),
+# so only Postgres runs here.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ergonomos
+      POSTGRES_PASSWORD: ergonomos
+      POSTGRES_DB: ergonomos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ergonomos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

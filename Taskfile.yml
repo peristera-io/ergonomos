@@ -1,0 +1,47 @@
+# Cross-toolchain entrypoints. Install: https://taskfile.dev (`brew install go-task`).
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  up:
+    desc: Start local dependencies (Postgres)
+    cmds:
+      - docker compose up -d
+
+  down:
+    desc: Stop local dependencies
+    cmds:
+      - docker compose down
+
+  server:build:
+    desc: Build the Go server
+    dir: server
+    cmds:
+      - go build ./...
+
+  server:test:
+    desc: Run Go tests
+    dir: server
+    cmds:
+      - go test ./...
+
+  server:run:
+    desc: Run the server locally
+    dir: server
+    cmds:
+      - go run ./cmd/ergonomos
+
+  app:get:
+    desc: Fetch Flutter dependencies (requires fvm)
+    dir: app
+    cmds:
+      - fvm flutter pub get
+
+  test:
+    desc: Run all tests
+    cmds:
+      - task: server:test

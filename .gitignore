@@ -1,0 +1,19 @@
+# Go
+/server/bin/
+*.test
+*.out
+
+# Flutter / Dart
+/app/.dart_tool/
+/app/build/
+/app/.flutter-plugins
+/app/.flutter-plugins-dependencies
+.fvm/
+
+# Env / secrets
+.env
+*.local
+
+# OS / editor
+.DS_Store
+*.swp

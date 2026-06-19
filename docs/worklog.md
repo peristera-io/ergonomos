@@ -6,6 +6,31 @@ what was skipped or left unfinished too.
 
 ---
 
+## 2026-06-19 — Fifth slice: task deletion
+
+Rounded out the task aggregate's lifecycle with deletion — the first operation
+that *retracts* an authorization tuple rather than writing one.
+
+- **Spec first (ADR-0001):** four scenarios in `task.feature` — delete (and the
+  task is gone afterwards, reusing the existing GET → 404 steps); another user
+  → 404; unknown id → 404; unauthenticated → 401. `api/openapi.yaml` gains
+  `DELETE /tasks/{id}` (204 / 401 / 404).
+- **`task.Service.Delete`:** goes through the same `owned` helper (authz check
+  before store read, so cross-user and unknown both yield ErrNotFound), then
+  deletes from the store, **removes** the `owner` tuple via `authz.Write(nil,
+  remove)`, and appends a `task.deleted` event. Because the tuple is retracted,
+  a repeat delete is a clean 404. `Store` gains `Delete`.
+- **REST:** `DELETE /tasks/{id}` returns 204 No Content with no body.
+- **Acceptance:** 26 scenarios / 133 steps green (22 prior + 4 new). Unit test
+  covers non-owner rejection, the post-delete 404, tuple retraction (second
+  delete → not found), and the emitted event.
+
+**Deferred (unchanged):** authz is still exact-tuple owner-only pending embedded
+OpenFGA; nothing consumes the outbox yet. Task CRUD is now complete (create,
+read, list, update, complete, delete).
+
+---
+
 ## 2026-06-19 — Fourth slice: task update & completion
 
 Extended the task aggregate from create/read/list to also support editing the

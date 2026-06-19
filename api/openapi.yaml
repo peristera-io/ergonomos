@@ -212,6 +212,26 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+    delete:
+      summary: Delete one of the authenticated actor's tasks
+      operationId: deleteTask
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: The task was deleted.
+        '401':
+          description: Missing or invalid authentication token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such task is visible to the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /tasks/{id}/complete:
     parameters:
       - name: id

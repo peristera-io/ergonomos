@@ -28,6 +28,10 @@ func registerTaskSteps(ctx *godog.ScenarioContext, w *world) {
 	ctx.Step(`^that user changes my task's title to "([^"]*)"$`, w.otherChangesTaskTitle)
 	ctx.Step(`^I complete that task$`, w.completeTask)
 	ctx.Step(`^that user completes my task$`, w.otherCompletesTask)
+	ctx.Step(`^I delete that task$`, w.deleteTask)
+	ctx.Step(`^I delete that task without a token$`, w.deleteTaskNoToken)
+	ctx.Step(`^that user deletes my task$`, w.otherDeletesTask)
+	ctx.Step(`^I delete a task with an unknown ID$`, w.deleteUnknownTask)
 
 	ctx.Step(`^the task is created$`, w.taskIsCreated)
 	ctx.Step(`^the task has an opaque, globally-unique identifier$`, w.taskHasOpaqueID)
@@ -40,6 +44,7 @@ func registerTaskSteps(ctx *godog.ScenarioContext, w *world) {
 	ctx.Step(`^I receive a list containing only my task "([^"]*)"$`, w.listContainsOnlyMyTask)
 	ctx.Step(`^the task is marked done$`, w.taskIsMarkedDone)
 	ctx.Step(`^the task is not marked done$`, w.taskIsNotMarkedDone)
+	ctx.Step(`^the task is deleted$`, w.taskIsDeleted)
 }
 
 // postTask creates a task through the API using the given bearer token (empty
@@ -89,6 +94,23 @@ func (w *world) patchTask(token, id, title string) error {
 // completeTaskAs marks a task done through the API using the given bearer token.
 func (w *world) completeTaskAs(token, id string) error {
 	req, err := http.NewRequest(http.MethodPost, w.server.URL+"/tasks/"+id+"/complete", nil)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return w.record(resp)
+}
+
+// deleteTaskAs removes a task through the API using the given bearer token
+// (empty for an unauthenticated request) and records the response.
+func (w *world) deleteTaskAs(token, id string) error {
+	req, err := http.NewRequest(http.MethodDelete, w.server.URL+"/tasks/"+id, nil)
 	if err != nil {
 		return err
 	}
@@ -193,6 +215,14 @@ func (w *world) completeTask() error { return w.completeTaskAs(w.token, w.taskID
 
 func (w *world) otherCompletesTask() error { return w.completeTaskAs(w.otherToken, w.taskID) }
 
+func (w *world) deleteTask() error { return w.deleteTaskAs(w.token, w.taskID) }
+
+func (w *world) deleteTaskNoToken() error { return w.deleteTaskAs("", w.taskID) }
+
+func (w *world) otherDeletesTask() error { return w.deleteTaskAs(w.otherToken, w.taskID) }
+
+func (w *world) deleteUnknownTask() error { return w.deleteTaskAs(w.token, string(domain.NewID())) }
+
 func (w *world) taskIsCreated() error {
 	return w.statusShouldBe(http.StatusCreated, "task creation")
 }
@@ -231,6 +261,10 @@ func (w *world) taskTitleIs(want string) error {
 
 func (w *world) taskNotFound() error {
 	return w.statusShouldBe(http.StatusNotFound, "task retrieval")
+}
+
+func (w *world) taskIsDeleted() error {
+	return w.statusShouldBe(http.StatusNoContent, "task deletion")
 }
 
 func (w *world) taskIsMarkedDone() error {

@@ -135,6 +135,29 @@ func TestComplete(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	f := newFixture()
+	ada, grace := newActor(), newActor()
+	created, _ := f.svc.Create(context.Background(), ada, "Write acceptance tests")
+
+	if err := f.svc.Delete(context.Background(), grace, created.ID); err != ErrNotFound {
+		t.Fatalf("non-owner delete error = %v, want ErrNotFound", err)
+	}
+	if err := f.svc.Delete(context.Background(), ada, created.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := f.svc.Get(context.Background(), ada, created.ID); err != ErrNotFound {
+		t.Fatalf("Get after delete error = %v, want ErrNotFound", err)
+	}
+	// Owner tuple retracted, so a second delete is also not found.
+	if err := f.svc.Delete(context.Background(), ada, created.ID); err != ErrNotFound {
+		t.Fatalf("second delete error = %v, want ErrNotFound", err)
+	}
+	if !hasEventType(f.outbox, "task.deleted") {
+		t.Fatalf("expected a task.deleted event, got %+v", f.outbox.Events())
+	}
+}
+
 func hasEventType(o *events.MemoryOutbox, typ string) bool {
 	for _, e := range o.Events() {
 		if e.Type == typ {

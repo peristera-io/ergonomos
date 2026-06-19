@@ -50,6 +50,8 @@ type Store interface {
 	Get(ctx context.Context, id domain.ID) (Task, error)
 	// Update replaces the stored task with t, or ErrNotFound if it is absent.
 	Update(ctx context.Context, t Task) error
+	// Delete removes the task with id, or ErrNotFound if it is absent.
+	Delete(ctx context.Context, id domain.ID) error
 	// ListByOwner returns the tasks owned by owner, in any order.
 	ListByOwner(ctx context.Context, owner domain.ID) ([]Task, error)
 }
@@ -135,6 +137,25 @@ func (s *Service) Complete(ctx context.Context, actor domain.Actor, id domain.ID
 		return Task{}, err
 	}
 	return t, nil
+}
+
+// Delete removes actor's task, retracts the owner authorization tuple, and
+// appends a task.deleted event. A non-owner (or unknown id) gets ErrNotFound.
+func (s *Service) Delete(ctx context.Context, actor domain.Actor, id domain.ID) error {
+	t, err := s.owned(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	if err := s.store.Delete(ctx, id); err != nil {
+		return err
+	}
+	if err := s.authz.Write(ctx, nil, []authz.Tuple{ownerTuple(t.Owner, t.ID)}); err != nil {
+		return err
+	}
+	if err := s.outbox.Append(ctx, changedEvent("task.deleted", t)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // owned returns actor's task, or ErrNotFound. The authorization check runs

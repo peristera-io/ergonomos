@@ -38,6 +38,7 @@ func New(authsvc *auth.Service, tasksvc *task.Service) http.Handler {
 		r.Get("/tasks/{id}", handleGetTask(tasksvc))
 		r.Patch("/tasks/{id}", handleUpdateTask(tasksvc))
 		r.Post("/tasks/{id}/complete", handleCompleteTask(tasksvc))
+		r.Delete("/tasks/{id}", handleDeleteTask(tasksvc))
 	})
 
 	return r
@@ -215,6 +216,22 @@ func handleCompleteTask(svc *task.Service) http.HandlerFunc {
 			writeProblem(w, http.StatusNotFound, "Task not found", "No such task is visible to you.")
 		default:
 			writeProblem(w, http.StatusInternalServerError, "Could not complete task", "")
+		}
+	}
+}
+
+func handleDeleteTask(svc *task.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := r.Context().Value(actorKey).(domain.Actor)
+		id := domain.ID(chi.URLParam(r, "id"))
+		err := svc.Delete(r.Context(), actor, id)
+		switch {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, task.ErrNotFound):
+			writeProblem(w, http.StatusNotFound, "Task not found", "No such task is visible to you.")
+		default:
+			writeProblem(w, http.StatusInternalServerError, "Could not delete task", "")
 		}
 	}
 }

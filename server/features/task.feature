@@ -81,6 +81,28 @@ Feature: Task management
     When I change that task's title to "Final" without a token
     Then the request is unauthorized
 
+  Scenario: Delete a task
+    Given I have created a task with title "Write acceptance tests"
+    When I delete that task
+    Then the task is deleted
+    When I request that task by its ID
+    Then the task is not found
+
+  Scenario: Another user cannot delete my task
+    Given I have created a task with title "Write acceptance tests"
+    And another user "grace@example.org" has signed in
+    When that user deletes my task
+    Then the task is not found
+
+  Scenario: Deleting an unknown task is not found
+    When I delete a task with an unknown ID
+    Then the task is not found
+
+  Scenario: Reject unauthenticated task deletion
+    Given I have created a task with title "Write acceptance tests"
+    When I delete that task without a token
+    Then the request is unauthorized
+
   Scenario: Reject unauthenticated task creation
     When I create a task without a token
     Then the request is unauthorized
